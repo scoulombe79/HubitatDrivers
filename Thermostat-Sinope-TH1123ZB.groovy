@@ -4,7 +4,8 @@
  *  Thermostat Sinopé TH1123ZB Driver
  *
  *  Version: 0.1
- *  0.1   (2019-12-21) => First release
+ *  0.1   (2019-12-20) => First release
+ *  0.2   (2019-12-21) => Added Lock / Unlock setting
  *
  *  Author: scoulombe
  *
@@ -19,6 +20,7 @@ preferences
 {
   input("BacklightAutoDimParam", "enum", title:"Backlight setting (default: sensing)", description: "On Demand or Sensing", options: ["On Demand", "Sensing"], multiple: false, required: false)
   input("DisableOutdorTemperatureParam", "bool", title: "disable outdoor temperature", description: "Set it to true to Disable outdoor temperature on the thermostat")
+  input("keyboardLockParam", "bool", title: "enable the lock", description: "Set to true to enable the lock on the thermostat")
   input("trace", "bool", title: "Trace", description:"Set it to true to enable tracing")
 }
 
@@ -237,6 +239,32 @@ def getLockMap()
   ]
 }
 
+def unlock()
+{
+  if (settings.trace)
+    log.trace "TH1123ZB >> unlock()"
+
+  sendEvent(name: "lock", value: "unlocked")
+
+  def cmds = []
+  cmds += zigbee.writeAttribute(0x0204, 0x0001, DataType.ENUM8, 0x00)
+
+  fireCommand(cmds)
+}
+
+def lock()
+{
+  if (settings.trace)
+    log.trace "TH1123ZB >> lock()"
+
+  sendEvent(name: "lock", value: "locked")
+
+  def cmds = []
+  cmds += zigbee.writeAttribute(0x0204, 0x0001, DataType.ENUM8, 0x01)
+
+  fireCommand(cmds)
+}
+
 def refresh()
 {
   if (settings.trace)
@@ -276,10 +304,10 @@ void refresh_misc()
   // Outdoor temperature
   if (!settings.DisableOutdorTemperatureParam)
   {
-    int outdoorTemp;
+    float outdoorTemp;
 
-    // Read some outdoor temperature here ...
-    
+  // Read some outdoor temperature here ...
+
     if (outdoorTemp)
     {
       cmds += zigbee.writeAttribute(0xFF01, 0x0011, DataType.UINT16, 10800, [:], 1000) // Set the outdoor temperature timeout to 3 hours
@@ -295,6 +323,12 @@ void refresh_misc()
   else
     cmds += zigbee.writeAttribute(0x0201, 0x0402, DataType.ENUM8, 0x0001)
 
+  // Lock / Unlock
+  if (keyboardLockParam != true)
+    unlock()
+  else
+    lock()
+
   // Time
   def thermostatDate = new Date();
   def thermostatTimeSec = thermostatDate.getTime() / 1000;
@@ -305,9 +339,9 @@ void refresh_misc()
 
   // °C or °F
   if (state?.scale == 'C')
-    cmds += zigbee.writeAttribute(0x0204, 0x0000, DataType.ENUM8, 0)	// °C on thermostat display
+    cmds += zigbee.writeAttribute(0x0204, 0x0000, DataType.ENUM8, 0)  // °C on thermostat display
   else
-    cmds += zigbee.writeAttribute(0x0204, 0x0000, DataType.ENUM8, 1)	// °F on thermostat display
+    cmds += zigbee.writeAttribute(0x0204, 0x0000, DataType.ENUM8, 1)  // °F on thermostat display
 
   if (cmds)
     fireCommand(cmds)

@@ -5,7 +5,7 @@
  *
  *  Version: 0.2
  *  0.1   (2019-12-20) => First release
- *  0.2   (2019-12-21) => Added Lock / Unlock setting
+ *  0.2   (2019-12-21) => Added Lock / Unlock setting / HealthCheck
  *
  *  Author: scoulombe
  *
@@ -31,6 +31,8 @@ metadata
     capability "Refresh"
     capability "Temperature Measurement"
     capability "Thermostat Heating Setpoint"
+    capability "Lock"
+    capability "HealthCheck"
 
     fingerprint manufacturer: "Sinope Technologies", model: "TH1123ZB", deviceJoinName: "Sinope TH1123ZB Thermostat", inClusters: "0000,0003,0004,0005,0201,0204,0402,0B04,0B05,FF01", outClusters: "0019,FF01"
   }
@@ -306,8 +308,8 @@ void refresh_misc()
   {
     float outdoorTemp;
 
-  // Read some outdoor temperature here ...
-
+    // Read some outdoor temperature here ...
+    
     if (outdoorTemp)
     {
       cmds += zigbee.writeAttribute(0xFF01, 0x0011, DataType.UINT16, 10800, [:], 1000) // Set the outdoor temperature timeout to 3 hours

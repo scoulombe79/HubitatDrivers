@@ -3,7 +3,7 @@
  *
  *  Thermostat Sinopé TH1123ZB Driver
  *
- *  Version: 0.1
+ *  Version: 0.2
  *  0.1   (2019-12-20) => First release
  *  0.2   (2019-12-21) => Added Lock / Unlock setting
  *

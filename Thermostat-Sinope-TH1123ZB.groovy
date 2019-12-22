@@ -3,13 +3,14 @@
  *
  *  Thermostat Sinopé TH1123ZB Driver
  *
- *  Version: 0.2
+ *  Version: 0.3
  *  0.1   (2019-12-20) => First release
  *  0.2   (2019-12-21) => Added Lock / Unlock setting / HealthCheck
+ *  0.3   (2019-12-21) => Fixed thermostat mode reporting, added thermostat mode setting, added power reporting (?)
  *
  *  Author: scoulombe
  *
- *  Date: 2019-12-21
+ *  Date: 2019-12-22
  *
  *  Sources:
  *  Sinopé => https://github.com/SmartThingsCommunity/SmartThingsPublic/blob/master/devicetypes/sinope-technologies/th1123zb-th1124zb-sinope-thermostat.src/th1123zb-th1124zb-sinope-thermostat.groovy
@@ -31,8 +32,10 @@ metadata
     capability "Refresh"
     capability "Temperature Measurement"
     capability "Thermostat Heating Setpoint"
+    capability "ThermostatMode"
     capability "Lock"
     capability "HealthCheck"
+    capability "PowerMeter"
 
     fingerprint manufacturer: "Sinope Technologies", model: "TH1123ZB", deviceJoinName: "Sinope TH1123ZB Thermostat", inClusters: "0000,0003,0004,0005,0201,0204,0402,0B04,0B05,FF01", outClusters: "0019,FF01"
   }
@@ -128,6 +131,8 @@ def parse(String description)
       }
     }
   }
+  else if (!description?.startsWith("catchall:"))
+    log.trace "TH1123ZB >> parse(description) ==> " + description
 
   return result
 }
@@ -153,6 +158,12 @@ def createCustomMap(descMap)
     def operatingState = (map.value.toInteger() < 10) ? "idle" : "heating"
     sendEvent(name: "thermostatOperatingState", value: operatingState)
   }
+  else if (descMap.cluster == "0B04" && descMap.attrId == "050B")
+  {
+    map.name = "power"
+    map.value = getActivePower(descMap.value)
+    sendEvent(name: map.name, value: map.value)
+  }
   else if (descMap.cluster == "0201" && descMap.attrId == "0012")
   {
     map.name = "heatingSetpoint"
@@ -165,7 +176,7 @@ def createCustomMap(descMap)
     map.value = getTemperatureValue(descMap.value, true)
     sendEvent(name: map.name, value: map.value, unit: scale)
   }
-  else if (descMap.cluster == "0201" && descMap.attrId == "001c")
+  else if (descMap.cluster == "0201" && descMap.attrId == "001C")
   {
     map.name = "thermostatMode"
     map.value = getModeMap()[descMap.value]
@@ -177,6 +188,8 @@ def createCustomMap(descMap)
     map.value = getLockMap()[descMap.value]
     sendEvent(name: map.name, value: map.value)
   }
+  else
+    log.trace "TH1123ZB >> createCustomMap(descMap) ==> " + descMap
 
   return map
 }
@@ -222,6 +235,16 @@ def getHeatingDemand(value)
     def demand = Integer.parseInt(value, 16)
 
     return demand.toString()
+  }
+}
+
+def getActivePower(value)
+{
+  if (value != null)
+  {
+    def activePower = Integer.parseInt(value, 16)
+
+    return activePower
   }
 }
 
@@ -284,11 +307,14 @@ def refresh()
     cmds += zigbee.readAttribute(0x0201, 0x0012)  // Rd thermostat Occupied heating setpoint
     cmds += zigbee.readAttribute(0x0201, 0x0008)  // Rd thermostat PI heating demand
     cmds += zigbee.readAttribute(0x0201, 0x001C)  // Rd thermostat System Mode
-    cmds += zigbee.readAttribute(0x0204, 0x0001)   // Rd thermostat Keypad lock
+    cmds += zigbee.readAttribute(0x0204, 0x0001)  // Rd thermostat Keypad lock
 
-    cmds += zigbee.configureReporting(0x0201, 0x0000, DataType.INT16, 19, 301, 50)   //local temperature
-    cmds += zigbee.configureReporting(0x0201, 0x0008, DataType.UINT8, 4, 300, 10)   //heating demand
-    cmds += zigbee.configureReporting(0x0201, 0x0012, DataType.INT16, 15, 302, 40)   //occupied heating setpoint
+    cmds += zigbee.readAttribute(0x0B04, 0x050B)  // Rd thermostat Active power ?
+
+    cmds += zigbee.configureReporting(0x0201, 0x0000, DataType.INT16, 19, 301, 50)      // local temperature
+    cmds += zigbee.configureReporting(0x0201, 0x0008, DataType.UINT8, 4, 300, 10)       // heating demand
+    cmds += zigbee.configureReporting(0x0201, 0x0012, DataType.INT16, 15, 302, 40)      // occupied heating setpoint
+    cmds += zigbee.configureReporting(0x0B04, 0x050B, DataType.INT16, 30, 599, 0x64)    // configure reporting of active power ... ?
 
     return cmds
   }
@@ -309,7 +335,7 @@ void refresh_misc()
     float outdoorTemp;
 
     // Read some outdoor temperature here ...
-    
+
     if (outdoorTemp)
     {
       cmds += zigbee.writeAttribute(0xFF01, 0x0011, DataType.UINT16, 10800, [:], 1000) // Set the outdoor temperature timeout to 3 hours
@@ -369,6 +395,79 @@ def setHeatingSetpoint(degrees)
   cmds += zigbee.writeAttribute(0x0201, 0x12, DataType.INT16,  zigbee.convertHexToInt(hex(celsius * 100)))
 
   return cmds
+}
+
+void off()
+{
+  setThermostatMode('off')
+}
+
+void auto()
+{
+  setThermostatMode('auto')
+}
+
+void heat()
+{
+  setThermostatMode('heat')
+}
+
+void emergencyHeat()
+{
+  setThermostatMode('heat')
+}
+
+void cool()
+{
+  setThermostatMode('cool')
+}
+
+def getSupportedThermostatModes()
+{
+  if (!state?.supportedThermostatModes)
+    state?.supportedThermostatModes = (device.currentValue("supportedThermostatModes")) ? device.currentValue("supportedThermostatModes").toString().minus('[').minus(']').tokenize(',') : ['off', 'heat']
+
+  return state?.supportedThermostatModes
+}
+
+def setThermostatMode(mode)
+{
+  if (settings.trace)
+    log.trace "TH1123ZB >> setThermostatMode(${mode})"
+
+  mode = mode?.toLowerCase()
+  def supportedThermostatModes = getSupportedThermostatModes()
+
+  if (mode in supportedThermostatModes)
+    "mode_$mode" ()
+}
+
+def mode_off()
+{
+  if (settings.trace)
+    log.trace "TH1123ZB >> mode_off()"
+
+  sendEvent(name: "thermostatMode", value: "off", data: [supportedThermostatModes: getSupportedThermostatModes()])
+
+  def cmds = []
+  cmds += zigbee.writeAttribute(0x0201, 0x001C, 0x30, 0)
+  cmds += zigbee.readAttribute(0x0201, 0x0008)
+
+  fireCommand(cmds)
+}
+
+def mode_heat()
+{
+  if (settings.trace)
+    log.trace "TH1123ZB >> mode_heat()"
+
+  sendEvent(name: "thermostatMode", value: "heat", data: [supportedThermostatModes: getSupportedThermostatModes()])
+
+  def cmds = []
+  cmds += zigbee.writeAttribute(0x0201, 0x001C, 0x30, 4)
+  cmds += zigbee.readAttribute(0x0201, 0x0008)
+
+  fireCommand(cmds)
 }
 
 private def checkTemperature(def number)

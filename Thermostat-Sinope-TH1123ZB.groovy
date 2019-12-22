@@ -6,7 +6,7 @@
  *  Version: 0.3
  *  0.1   (2019-12-20) => First release
  *  0.2   (2019-12-21) => Added Lock / Unlock setting / HealthCheck
- *  0.3   (2019-12-21) => Fixed thermostat mode reporting, added thermostat mode setting, added power reporting (?)
+ *  0.3   (2019-12-22) => Fixed thermostat mode reporting, added thermostat mode setting, added power reporting (?)
  *
  *  Author: scoulombe
  *

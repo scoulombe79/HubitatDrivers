@@ -29,6 +29,7 @@ metadata
 {
   definition(name: "TH1123ZB Sinope Thermostat", namespace: "scoulombe", author: "scoulombe", ocfDeviceType: "oic.d.thermostat") {
     capability "Configuration"
+    capability "Thermostat"
     capability "Refresh"
     capability "Temperature Measurement"
     capability "Thermostat Heating Setpoint"
